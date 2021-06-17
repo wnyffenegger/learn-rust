@@ -41,7 +41,9 @@ impl Server {
                             // we don't care if they're invalid right now
                             println!("Received a request: {}", String::from_utf8_lossy(&buffer));
                             match Request::try_from(&buffer[..]) {
-                                Ok(request) => {}
+                                Ok(request) => {
+                                    dbg!(request);
+                                }
                                 Err(err) => {
                                     println!("Failed to translate buffer into string {}", err);
                                 }

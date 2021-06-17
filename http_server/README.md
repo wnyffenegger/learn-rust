@@ -531,3 +531,158 @@ Example:
 
 option.ok_or(ParseError::InvalidRequest)?;
 ```
+
+### Lifetimes
+
+Problem: a buffer lives in memory some where with an HTTP request. What happens if we de-allocate the buffer while the Request object which points to sections of that buffer is still in use?
+
+This is a dangling pointer issue.
+
+Our `Request` will outlive the buffer.
+
+The Rust compiler forces us to deal with this issue. If your code compiles then there are no dangling references.
+
+But Rust needs help from lifetimes to figure out when
+to de-allocate stuff and what slices are pointing to.
+
+#### How to use
+
+Must make your `struct` generic. But not generic over a type but generic over a lifetime.
+
+A lifetime is declared with a single quote inside brackets `<'example_lifetime>`.
+
+#### Lifetimes and types
+
+A lifetime is implicitly part of a type.
+
+Every type has a lifetime implicitly. The only time you intereact with that lifetime is when you need to explicitly modify it from the default behavior.
+
+#### Compiler inferences
+
+The compiler infers that the lifetime of the parameters to a function matches the lifetime
+of what is returned by a function.
+
+```rust
+
+fn foo(&[u8]) -> &[u8] {
+
+}
+
+// Is really this under the hood
+fn foo(&'a [u8]) -> &'a [u8] {
+
+}
+
+Wherever possible the compiler will infer the lifetime so you do not have to supply it.
+
+#### Example
+
+```rust
+
+// 'buf is the lifetime of the buffer
+// which the string slices path and query_string point to
+pub struct Request<'buf> {
+    path: &'buf str,
+    query_string: Option<&'buf str>,
+    method: Method,
+}
+
+// You must declare the lifetime to use it
+// in an implementation by adding it to the impl
+// keyword
+impl<'buf> TryFrom<&[u8]> for Request<'buf> {
+
+}
+
+// But that may not be enough because the buffer
+// used by the request needs to pass in the lifetime
+// so all variables generated off the buffer get that
+// lifetime.
+
+impl<'buf> TryFrom<&'buf [u8]> for Request<'buf> {
+        // Since the lifetime is part of the type of
+        // the parameter you need to specify it
+        // as part of the parameter
+        fn try_from(byte_array: &'buf [u8]) -> Result<Self, Self::Error> {
+        }
+}
+```
+
+### Anonymous Functions / Closures
+
+To declare an anonymous function use the pipe syntax.
+
+Anonymous functions are used as parameters to other functions and serve like a closure. Sometimes you need to provide anonymous functions.
+
+The syntax for an anonymous function is to have
+all parameters surrounded by pipes `|param1, param2, param3|` and then curly brackets 
+```rust
+
+my_funct(|param1, param2, param3| {
+    // Anonymous function implementation
+})
+```
+
+An example from the course:
+
+```rust
+ data.entry(key)
+    // If the entry already exists 
+    // we need to modify it so pass in the function
+    // dictating the modification.
+    .and_modify(|existing| match existing {
+        // Take an existing entry, if single convert to multiple, if multiple add to vec
+        Value::Single(prev_val) => {
+            *existing = Value::Multiple(vec![prev_val, value]);
+        }
+        Value::Multiple(vec) => vec.push(value),
+    })
+    .or_insert(Value::Single(value));
+
+```
+
+### Dereferencing a value
+
+Given a location in memory if you want to change the contents of that location in memory you need to dereference it.
+
+To dereference a location in memory use the `*` syntax.
+
+In the example below we are working with a HashMap where the `existing` variable is a location in memory
+in the hashmap. That location contains a pointer which we wish to change to point to a new object (a different pointer).
+
+```rust
+ data.entry(key)
+    .and_modify(|existing| match existing {
+        Value::Single(prev_val) => {
+            // Existing points to a location in the HashMap
+            // The location contains a Value::Single
+            // We wish to replace the location with a Value::Multiple
+            // To do that we create a Value::Multiple and dereference existing
+            // This only works because all values of an enum are guaranteed to take the same amount of memory
+            // If that wasn't the case then Rust would complain
+            *existing = Value::Multiple(vec![prev_val, value]);
+        }
+        Value::Multiple(vec) => vec.push(value),
+    })
+    .or_insert(Value::Single(value));
+
+```
+
+### Derive Attribute
+
+The derive attribute lets the compiler implement
+a trait for you if implementing it yourself
+takes too much effort.
+
+```rust
+#[derive(Debug)]
+pub struct QueryString<'buf> {
+    data: HashMap<&'buf str, Value<'buf>>,
+}
+
+#[derive(Debug)]
+pub enum Value<'buf> {
+    Single(&'buf str),
+    Multiple(Vec<&'buf str>),
+}
+```
