@@ -686,3 +686,64 @@ pub enum Value<'buf> {
     Multiple(Vec<&'buf str>),
 }
 ```
+
+### Copy & Clone
+
+There are two types of things in Rust: types that live entirely on the stack and types that live on the heap.
+
+Types living on the Stack can be trivially copied, the other type not so much.
+
+For more complex types there is the `Clone` trait
+that lets you do a deep copy on the heap.
+
+Anything that has `Copy` implemented must also have `Clone` implemented. This is because if a shallow copy is possible a deep copy is trivial.
+
+```rust
+#[derive(Clone, Copy, Debug)]
+pub enum StatusCode {
+    OK = 200,
+    BAD_REQUEST = 400,
+    NOT_FOUND = 404,
+}
+```
+
+### Dynamic vs. Static Dispatch (Generics)
+
+
+#### Dynamic Dispatch
+
+`dyn` tells the compiler to use dynamic dispatch. Basically if you use `Write` then the implementation of the `Write` trait isn't known until runtime. 
+
+Underneath the hood Rust maintains a `vtable` which associates implementations of `Write` with the trait
+itself.
+
+At runtime the code will jump to the vtable
+and then jump to the implementation. This can get expensive at runtime.
+
+Example
+```rust
+pub fn send(&self, stream: &mut dyn Write) -> IOResult<()> {
+    let body = match &self.body {
+        Some(b) => b,
+        None => "",
+    };
+
+    write!(
+        stream,
+        "HTTP/1.1 {} {}\r\n\r\n{}",
+        self.status_code,
+        self.status_code.reason_phrase(),
+        body
+    )
+}
+```
+
+#### Static Dispatch
+
+Instead of using `dyn` you can replace it with `impl`. If you do so, then at compile time the compiler will look at all of your usages of that
+function.
+
+For every different concrete type the compiler will create a copy of the function with
+the concrete type.
+
+The compilation is slower and the binary is larger. But the win for RAM is normally worth it.

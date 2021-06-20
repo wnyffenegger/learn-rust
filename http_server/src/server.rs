@@ -1,12 +1,21 @@
-use crate::http::Request;
+use crate::http::{ParseError, Request, Response, StatusCode};
 use std::convert::TryFrom;
 use std::convert::TryInto;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::TcpListener;
 
 // By default this becomes the 'server' module
 // so it needs to be addressed as server::Server
 // or included with use or something
+
+pub trait Handler {
+    fn handle_request(&mut self, request: &Request) -> Response;
+
+    fn handle_bad_request(&mut self, e: &ParseError) -> Response {
+        println!("Failed to parse request: {}", e);
+        Response::new(StatusCode::BAD_REQUEST, None)
+    }
+}
 
 pub struct Server {
     addr: String,
@@ -17,7 +26,7 @@ impl Server {
         Self { addr }
     }
 
-    pub fn run(self) {
+    pub fn run(self, mut handler: impl Handler) {
         println!("Server is listening on {} ", &self.addr);
 
         // Bind returns a recoverable error
@@ -40,13 +49,13 @@ impl Server {
                             // Need to convert buffer to actual text to read to screen
                             // we don't care if they're invalid right now
                             println!("Received a request: {}", String::from_utf8_lossy(&buffer));
-                            match Request::try_from(&buffer[..]) {
-                                Ok(request) => {
-                                    dbg!(request);
-                                }
-                                Err(err) => {
-                                    println!("Failed to translate buffer into string {}", err);
-                                }
+                            let response = match Request::try_from(&buffer[..]) {
+                                Ok(request) => handler.handle_request(&request),
+                                Err(err) => handler.handle_bad_request(&err),
+                            };
+
+                            if let Err(e) = response.send(&mut stream) {
+                                println!("Failed to send response: {}", e);
                             }
                         }
                         Err(e) => println!("Failed to read from connection: {}", e),
